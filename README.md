@@ -39,7 +39,7 @@ The following pins of the msp430G2553 are misused for the purpose
 Left side, top to down
 
 | Pin# | Port | Function | Description     |
-|------+------+----------+-----------------|
+|------|------|----------|-----------------|
 |    1 | DVCC | +3.3v    | Electrons exit  |
 |    2 | P1.0 | IO       | in :R Encoder A |
 |    3 | P1.1 | UART RX  | data from Pi    |
