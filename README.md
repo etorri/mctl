@@ -55,7 +55,7 @@ Left side, top to down
 Right Side, top to down
 
 | Pin# | Port | Function | Description     |
-|------+------+----------+-----------------|
+|------|------|----------|-----------------|
 |   20 | DVSS | +0v      | Electrons enter |
 |   19 | P2.6 | IO       | in: L Encoder A |
 |   18 | P2.7 | IO       | in: L Encoder B |
