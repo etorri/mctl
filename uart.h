@@ -12,8 +12,9 @@
 #define UCBRS(X) ((X)<<1)
 
 
-void uart_init(void);
-void uart_write(uint8_t c);
-uint8_t uart_read(void);
-void uart_print(const char *s);
-void printx(const uint8_t c);
+extern void uart_init(void);
+extern void uart_write(uint8_t c);
+extern uint8_t uart_read(void);
+extern void uart_print(const char *s);
+extern void uart_printx(uint8_t *b, uint8_t n);
+extern void uart_eol(void);
