@@ -27,6 +27,15 @@ void pwm_lr_set(uint16_t l, uint16_t r) {
   TA1CCR2=PWM_CAP(r);
 }
 
+void pwm_l_set(uint16_t pwr) {
+  TA1CCR1=PWM_CAP(pwr);
+}  
+
+void pwm_r_set(uint16_t pwr) {
+  TA1CCR2=PWM_CAP(pwr);
+}
+
+
 void pwm_test_set(uint16_t d, uint16_t l) {
   TA1CCR1=d;
   TA1CCR2=d;

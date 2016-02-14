@@ -43,15 +43,15 @@ Left side, top to down
 | Pin# | Port | Function | Description     |
 |------|------|----------|-----------------|
 |    1 | DVCC | +3.3v    | Electrons exit  |
-|    2 | P1.0 | IO       | in: L DIAGa     |
+|    2 | P1.0 | IO       | in: L DIAG      |
 |    3 | P1.1 | UART RX  | data from Pi    |
 |    4 | P1.2 | UART TX  | data to Pi      |
-|    5 | P1.3 | IO       | in: L DIAGb     |
-|    6 | P1.4 | IO       | in :L Encoder A |
-|    7 | P1.5 | IO       | in :L Encoder B |
-|    8 | P2.0 | IO       | out:L INA       |
+|    5 | P1.3 | IO       |                 |
+|    6 | P1.4 | IO       | in :L Encoder B |
+|    7 | P1.5 | IO       | in :L Encoder A |
+|    8 | P2.0 | IO       | out:L INB       |
 |    9 | P2.1 | TA1.1    | out:L PWM       |
-|   10 | P2.2 | IO       | out:L INB       |
+|   10 | P2.2 | IO       | out:L INA       |
 
 
 Right Side, top to down
@@ -59,24 +59,25 @@ Right Side, top to down
 | Pin# | Port | Function | Description     |
 |------|------|----------|-----------------|
 |   20 | DVSS | +0v      | Electrons enter |
-|   19 | P2.6 | IO       | in :R DIAGa     |
-|   18 | P2.7 | IO       | in :R DIAGb     |
+|   19 | P2.6 | IO       | in :R DIAG      |
+|   18 | P2.7 | IO       |                 |
 |   17 | x    | TEST     | Programmer      |
 |   16 | x    | RESET    | Programmer      |
-|   15 | P1.7 | IO       | in: R Encoder A |
-|   14 | P1.6 | TA0.1    | in: R Encoder B |
-|   13 | P2.5 | IO       | out:R INA       |
-|   12 | P2.4 | IO       | out:R PWM       |
-|   11 | P2.3 | IO       | out:R INB       |
+|   15 | P1.7 | IO       | in: R Encoder B |
+|   14 | P1.6 | IO       | in: R Encoder A |
+|   13 | P2.5 | IO       | out:R INB       |
+|   12 | P2.4 | TA1.2    | out:R PWM       |
+|   11 | P2.3 | IO       | out:R INA       |
 
 The motor driver also provides two Current Sense (CS) analog outputs
-that tell how many amps go through a motor. As you see there are no pins
-left in this chip to handle that so I'll leave that out now.
+that tell how many amps go through a motor.
+
 
 # CPU settings
 
 Low power operation (at which the msp430 is also good at) is not
 within the scope. It runs full speed 16MHz from the DCO oscillator.
+
 
 # Motor control signals to the driver
 
@@ -97,16 +98,15 @@ Three states of INA and INB motor driver pins are used
 Braking state means shorting both motors to ground. With the 51:1 gears
 this shouldn't really be necessary.
 
-The PWM has 10KHz frequency with resolution of 4000 steps. 
-This might be an overkill and perhaps even the 20KHz freq with
-2000 steps would be too. The motor driver documentation says max 20KHz.
+The PWM has 10KHz frequency and motor driver documentation says max 20KHz.
+DCO clock 16MHZ with
 
 The driver operates at 5v and high level signal is 3.27v which is
 uncomfortably close to the 3.3v of msp430 so level converters are needed.
 
 The INA, INB pins in MSP need to be in the same port to be able to change
-them simultaneously. Otherwise the motor will be in braking mode for
-a short period.
+them simultaneously. Otherwise the motor might be in braking mode for
+a short period. Documentation mentions 
 
 Example:
 
