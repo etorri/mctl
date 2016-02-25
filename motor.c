@@ -13,20 +13,24 @@ static uint8_t l_prev_sgn;
 static uint8_t r_prev_sgn;
 
 
-// fault set with DIAG{a|b}=0, not tested yet
-
 volatile uint8_t motor_state;
 
-// left INA port 2 pin 0
+// left INA port 2.0
 #define LINA BIT2
-// left INB port 2 pin 2
+// left INB port 2.2
 #define LINB BIT0
-// right INA port 2 pin 3
+// left ENA port 1.0
+#define LENA BIT0
+// left DIAG port 1.3
+#define LDIAG BIT3
+// right INA port 2.3
 #define RINA BIT3
-// right INB port 2 pin 5
+// right INB port 2.5
 #define RINB BIT5
-
-
+// right ENA port 2.6
+#define RENA BIT6
+// right DIAG port 2.7
+#define RDIAG BIT7
 
 void motor_init(void) {
   // motor uses pwm

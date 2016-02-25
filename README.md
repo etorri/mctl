@@ -37,37 +37,39 @@ The controller reports back to Pi
 # Pins wasted
 
 The following pins of the msp430G2553 are misused for the purpose
+(see the eagle files)
 
 Left side, top to down
 
-| Pin# | Port | Function | Description     |
-|------|------|----------|-----------------|
-|    1 | DVCC | +3.3v    | Electrons exit  |
-|    2 | P1.0 | IO       | in: L DIAG      |
-|    3 | P1.1 | UART RX  | data from Pi    |
-|    4 | P1.2 | UART TX  | data to Pi      |
-|    5 | P1.3 | IO       |                 |
-|    6 | P1.4 | IO       | in :L Encoder B |
-|    7 | P1.5 | IO       | in :L Encoder A |
-|    8 | P2.0 | IO       | out:L INB       |
-|    9 | P2.1 | TA1.1    | out:L PWM       |
-|   10 | P2.2 | IO       | out:L INA       |
+| Pin# | Port | Function | Description      |
+|------+------+----------+------------------|
+|    1 | DVCC | +3.3v    | Electrons exit   |
+|    2 | P1.0 | IO       | out: L ENA       |
+|    3 | P1.1 | UART RX  | data from Pi     |
+|    4 | P1.2 | UART TX  | data to Pi       |
+|    5 | P1.3 | IO       | in : L DIAG      |
+|    6 | P1.4 | IO       | in : L Encoder B |
+|    7 | P1.5 | IO       | in : L Encoder A |
+|    8 | P2.0 | IO       | out: L INB       |
+|    9 | P2.1 | TA1.1    | out: L PWM       |
+|   10 | P2.2 | IO       | out: L INA       |
+
 
 
 Right Side, top to down
 
-| Pin# | Port | Function | Description     |
-|------|------|----------|-----------------|
-|   20 | DVSS | +0v      | Electrons enter |
-|   19 | P2.6 | IO       | in :R DIAG      |
-|   18 | P2.7 | IO       |                 |
-|   17 | x    | TEST     | Programmer      |
-|   16 | x    | RESET    | Programmer      |
-|   15 | P1.7 | IO       | in: R Encoder B |
-|   14 | P1.6 | IO       | in: R Encoder A |
-|   13 | P2.5 | IO       | out:R INB       |
-|   12 | P2.4 | TA1.2    | out:R PWM       |
-|   11 | P2.3 | IO       | out:R INA       |
+| Pin# | Port | Function | Description       |
+|------+------+----------+-------------------|
+|   20 | DVSS | +0v      | Electrons enter   |
+|   19 | P2.6 | IO       | out: R ENA        |
+|   18 | P2.7 | IO       | in : R DIAG       |
+|   17 | x    | TEST     | Programmer        |
+|   16 | x    | RESET    | Programmer        |
+|   15 | P1.7 | IO       | in :  R Encoder B |
+|   14 | P1.6 | IO       | in :  R Encoder A |
+|   13 | P2.5 | IO       | out: R INB        |
+|   12 | P2.4 | TA1.2    | out: R PWM        |
+|   11 | P2.3 | IO       | out: R INA        |
 
 The motor driver also provides two Current Sense (CS) analog outputs
 that tell how many amps go through a motor.
