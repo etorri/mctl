@@ -22,33 +22,32 @@ int main(void) {
   BCSCTL1= CALBC1_16MHZ;
   DCOCTL = CALDCO_16MHZ;
   
-  P1DIR |= BIT0|BIT6;
-  P1OUT |= BIT0|BIT6;
   clock_init();
   uart_init();
   motor_init();
-  //encoder_init();
+  encoder_init();
   // -------------
   //    action
   // -------------
   _BIS_SR(GIE);
-  __delay_cycles(1600000);
-  P1OUT &= ~(BIT0|BIT6);
-  __delay_cycles(1600000);
 
-  P2DIR |= BIT0|BIT2;
+  uart_print("Showtime\r\n");
   pwm_lr_set(1600,0);
   uint8_t c;
   while(1){
-    P2OUT = (P2OUT|BIT2)&~BIT0;
-    P1OUT|=BIT0;
     c=uart_read();
-    P1OUT|=BIT6;
-    P2OUT = (P2OUT|BIT0)&~BIT2;
-    PAUS;
-    uart_write(c);
-    P1OUT &= ~(BIT0|BIT6);
-    PAUS;
+    switch(c){
+    case 'a':
+      uart_print("Motor enable\r\n");
+      break;
+    case 's':
+      uart_print("Motor disable\r\n");
+      break;
+    default:
+      uart_print("123456789012345678901234567890123456789012345678901234567890:");
+      uart_write(c);
+      uart_print("\r\n");
+    }
   }
 }
 

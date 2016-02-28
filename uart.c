@@ -4,8 +4,8 @@
 #include "buffer.h"
 
 
-struct CircularBuffer txbuf;
-struct CircularBuffer rxbuf;
+volatile struct CircularBuffer txbuf;
+volatile struct CircularBuffer rxbuf;
 
 
 // Put byte to uart tx buffer and enable TX interrupts
