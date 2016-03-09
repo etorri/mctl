@@ -4,101 +4,156 @@
 #include "motor.h"
 #include "pwm.h"
 #include "encoder.h"
-// Motor states
-#define MOTOR_BRAKE 0
-#define MOTOR_RUN   1
-#define MOTOR_FAULT 2
-
-static uint8_t l_prev_sgn;
-static uint8_t r_prev_sgn;
-
+#include "clock.h"
+#include "protocols.h"
 
 volatile uint8_t motor_state;
+volatile uint8_t motor_msg;
+volatile int left_power;
+volatile int right_power;
+uint32_t power_timer;
 
-// left INA port 2.0
-#define LINA BIT2
-// left INB port 2.2
-#define LINB BIT0
-// left ENA port 1.0
-#define LENA BIT0
-// left DIAG port 1.3
-#define LDIAG BIT3
-// right INA port 2.3
-#define RINA BIT3
-// right INB port 2.5
-#define RINB BIT5
-// right ENA port 2.6
-#define RENA BIT6
-// right DIAG port 2.7
-#define RDIAG BIT7
+// max 1 second without power setting commands from Pi
+// in RUN state
+#define MAX_POWER_SETTING_INTERVAL 8000000
+// in Slow
+#define SLOW_DOWN_INTERVAL         20000
+
+void motor_set_power(void);
+
+inline void motor_ready(void){
+  // set pwm to 0
+  left_power=right_power=0;
+  motor_set_power();
+  // motor in breaking state
+  P2OUT &= ~(LINA|LINB|RINA|RINB);
+}
+
 
 void motor_init(void) {
-  // motor uses pwm
-  pwm_init();
-  // initial motor state RUN both motors forward pwm 0
-  l_prev_sgn=0;      // set fake prev direction backwards
-  motor_set_left(0); // so this initializes the INA/B
-  // same for right side
-  r_prev_sgn=0;
-  motor_set_right(0);
-  // Initial sate is RUN
-  motor_state=MOTOR_RUN;
-}
-
-void motor_set_handbrake(void){
-  P2OUT= P2OUT & ~(LINA|LINB|RINA|RINB);
-  pwm_lr_set(0,0);
-  motor_state=MOTOR_BRAKE;
-}
-
-void motor_release_handbrake(void) {
-  // after handbrake release return to initial state
-  motor_init();
+  // Set INA and INB as normal IO pin outputs
+  P2DIR  |= LINA|LINB|RINA|RINB;
+  P2SEL  &= ~(LINA|LINB|RINA|RINB);
+  P2SEL2 &= ~(LINA|LINB|RINA|RINB);
+  // initialize variables
+  motor_state=MSTATE_READY;
+  motor_msg=0;
+  // do what is needed to enter the READY state
+  motor_ready();
 }
 
 
-void motor_set_left(int power) {
-  int8_t sgn= (power>=0);
+
+ 
+inline void motor_set_left(int power) {
+  int8_t sgn;
+  sgn= (power>=0);
   power=abs(power);
-  // change of direction?
-  switch((sgn<<1) + l_prev_sgn){
-  case 1:
-    // previously CW, now CCW
-    P2OUT = (P2OUT&~LINB)|LINA;
-    break;
-  case 2:
-    // previously CCW now CW
-    P2OUT = (P2OUT&~LINA)|LINB;
-    break;
-  default:
-    // no change, change nothing
-    break;
+  if(sgn) {
+    // power is positive => CW
+    P2OUT = (P2OUT|LINA)&(~LINB);
+  }else{
+    // power is negative => CCW
+    P2OUT = (P2OUT|LINB)&(~LINA);
   }
   pwm_l_set(power);
-  l_prev_sgn=sgn;
 }
 
 
-void motor_set_right(int power) {
-  int8_t sgn= (power>=0);
+inline void motor_set_right(int power) {
+  int8_t sgn;
+  sgn= (power>=0);
   power=abs(power);
-  // change of direction?
-  switch((sgn<<1) + r_prev_sgn){
-  case 1:
-    // previously CW, now CCW
-    P2OUT = (P2OUT&~RINA)|RINB;
-    break;
-  case 2:
-    // previously CCW now CW
-    P2OUT = (P2OUT&~RINB)|RINA;
-    break;
-  default:
-    // no change, change nothing
-    break;
+  if(sgn) {
+    P2OUT = (P2OUT|RINA)&(~RINB);
+  }else{
+    P2OUT = (P2OUT|RINB)&(~RINA);
   }
   pwm_r_set(power);
-  r_prev_sgn=sgn;
 }
-    
+
+inline void motor_set_power(void){
+  motor_set_right(right_power);
+  motor_set_left(left_power);
+}
 
 
+
+void motor_machine(void) {
+  switch(motor_state){
+  case MSTATE_READY:
+    if(motor_msg&MMSG_FAIL){
+      motor_ready();
+      motor_state=MSTATE_FAIL;
+      outmsg=OUT_S4;
+    } else if(motor_msg&MMSG_POWER) {
+      motor_set_power();
+      set_timer(&power_timer);
+      motor_state=MSTATE_RUN;
+      outmsg=OUT_S2;
+    }
+    motor_msg=0;
+    break;
+	  
+  case MSTATE_RUN:
+    // if Pi is not talking frequently enough (dead?) stop everything
+    // and do not keep driving towards the cliff
+    if(interval_elapsed(&power_timer,MAX_POWER_SETTING_INTERVAL)){
+      motor_msg=MMSG_TIMEOUT; //motor_msg=MMSG_TIMEOUT;
+    }
+    if(motor_msg&MMSG_FAIL) {
+      motor_ready();
+      motor_state=MSTATE_FAIL;
+      motor_msg=0;
+      outmsg=OUT_S4;
+    } else if(motor_msg&MMSG_POWER) {
+      set_timer(&power_timer);
+      motor_set_left(left_power);
+      motor_set_right(right_power);
+      motor_state=MSTATE_RUN;
+      outmsg=OUT_S2;
+    } else if(motor_msg&MMSG_STOP) {
+      motor_ready();
+      motor_state=MSTATE_READY;
+      outmsg=OUT_S1;
+    } else if(motor_msg&MMSG_TIMEOUT) {
+      motor_state=MSTATE_SLOWDOWN;
+      set_timer(&power_timer);
+      outmsg=OUT_S3;
+    }
+    motor_msg=0;
+    break;
+
+  case MSTATE_SLOWDOWN:
+    if(interval_elapsed(&power_timer,SLOW_DOWN_INTERVAL)){
+      if(left_power!=0){
+	left_power += (left_power<0)?1:-1;
+      }
+      if(right_power!=0){
+	right_power += (right_power<0)?1:-1;
+      }
+      motor_set_power();
+    }
+    if(motor_msg&MMSG_FAIL) {
+      motor_ready();
+      motor_state=MSTATE_FAIL;
+      outmsg=OUT_S4;
+    } else if (motor_msg&MMSG_STOP) {
+      // Clear the slowdown state
+      motor_ready();
+      motor_state=MSTATE_READY;
+      outmsg=OUT_S1;
+    }
+    motor_msg=0;
+    break;
+
+  case MSTATE_FAIL:
+    if(motor_msg&MMSG_CLEAR){
+      motor_state=MSTATE_READY;
+      motor_msg=0;
+      outmsg=OUT_S1;
+    }
+    motor_ready();
+    break;
+  }
+}

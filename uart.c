@@ -2,21 +2,20 @@
 #include <inttypes.h>
 #include "uart.h"
 #include "buffer.h"
-
+#include "motor.h"
+#include "encoder.h"
+#include "clock.h"
 
 volatile struct CircularBuffer txbuf;
 volatile struct CircularBuffer rxbuf;
 
 
-// Put byte to uart tx buffer and enable TX interrupts
+// loop trying to put the given byte to tx buffer until it succeeds.
+// enable tx interrupt (even if it is already on) to get the tx machine going
 void uart_put_uint8(uint8_t c) {
-  if(IE2&UCA0TXIE) {
-    while(put_buf(&txbuf,&c))
-      _NOP();
-  } else {
-    IE2 |= UCA0TXIE;
-    UCA0TXBUF=c;
-  }
+  while(put_buf(&txbuf,&c))
+    _NOP();
+  IE2 |= UCA0TXIE;
 }
 
 void uart_get_uint8(uint8_t *cp){
@@ -24,27 +23,19 @@ void uart_get_uint8(uint8_t *cp){
 	_NOP();
 }
 
-
-// uart TX ready for next byte ISR
-void __attribute__((interrupt (USCIAB0TX_VECTOR)))
-uart_tx_isr(void) {
-  uint8_t c;
-  if(get_buf(&txbuf,&c)==0) {
-    // buffer had one character
-    UCA0TXBUF=c;
-  } else {
-    // buffer underflow, TX isr done 
-    IE2 &= ~UCA0TXIE;
+uint8_t uart_async_put_uint8(uint8_t c) {
+  if(put_buf(&txbuf,&c)){
+    return 0;
   }
+  IE2 |= UCA0TXIE;
+  return 1;
 }
 
 
-void __attribute__((interrupt (USCIAB0RX_VECTOR)))
-uart_rx_isr(void) {
-  uint8_t c;
-  c=UCA0RXBUF; // clears interrupt flag too
-  put_buf(&rxbuf,&c);
+uint8_t uart_async_get_uint8(uint8_t *cp){
+  return !get_buf(&rxbuf,cp);
 }
+
 
 
 void uart_init(void) {
@@ -73,7 +64,6 @@ void uart_init(void) {
   UCA0CTL1 &= ~UCSWRST; // release reset
   // Enable rx interrupt
   //IE2 |= UCA0RXIE|UCA0TXIE;
-  IE2 |= UCA0RXIE;
 }
 
 
@@ -109,3 +99,4 @@ void uart_printx(uint8_t *b, uint8_t n) {
     uart_write(hex_table[c & 0x0F]);
   }
 }
+

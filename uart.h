@@ -11,6 +11,9 @@
 #define UCBRF(X) ((X)<<4)
 #define UCBRS(X) ((X)<<1)
 
+extern volatile struct CircularBuffer txbuf;
+extern volatile struct CircularBuffer rxbuf;
+
 
 extern void uart_init(void);
 extern void uart_write(uint8_t c);

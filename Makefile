@@ -4,7 +4,7 @@ CFLAGS=-O3  -mmcu=msp430g2553 -Wall
 #CFLAGS=-mmcu=msp430g2553 -Wall
 
 
-DEPS=mctl.o pwm.o uart.o clock.o encoder.o buffer.o motor.o
+DEPS=mctl.o pwm.o uart.o clock.o encoder.o buffer.o motor.o interrupts.o protocols.o
 BIN=mctl
 
 mctl: $(DEPS)

@@ -2,18 +2,15 @@
 #include <inttypes.h>
 
 #include "clock.h"
-//#include "pwm.h"
+#include "pwm.h"
 #include "motor.h"
 #include "uart.h"
 #include "encoder.h"
 
-//
-// special test program for checking the motor routines
-//
-
 #define PAUS __delay_cycles(1600000)
 
 int main(void) {
+  int speed;
   WDTCTL = WDTPW + WDTHOLD;   // Stop WDT
   // configure the CPU clock (MCLK)
   // to run from SMCLK: DCO @ 16MHz and SMCLK = DCO
@@ -25,34 +22,82 @@ int main(void) {
   DCOCTL = 0;
   BCSCTL1= CALBC1_16MHZ;
   DCOCTL = CALDCO_16MHZ;
-  
-  P1DIR |= BIT0|BIT6;
-  P1OUT |= BIT0|BIT6;
+
   clock_init();
   uart_init();
+  pwm_init();
+  encoder_init();
   motor_init();
-  //encoder_init();
   // -------------
   //    action
   // -------------
   _BIS_SR(GIE);
-  __delay_cycles(1600000);
-  P1OUT &= ~(BIT0|BIT6);
-  __delay_cycles(1600000);
 
-  P2DIR |= BIT0|BIT2;
-  pwm_lr_set(1600,0);
+  uart_print("Initialized\r\n");
   uint8_t c;
   while(1){
-    P2OUT = (P2OUT|BIT2)&~BIT0;
-    P1OUT|=BIT0;
     c=uart_read();
-    P1OUT|=BIT6;
-    P2OUT = (P2OUT|BIT0)&~BIT2;
-    PAUS;
-    uart_write(c);
-    P1OUT &= ~(BIT0|BIT6);
-    PAUS;
+    switch(c){
+    case 'e':
+      uart_print("Motor enable\r\n");
+      motor_enable();
+      break;
+    case 'd':
+      uart_print("Motor disable\r\n");
+      motor_disable();
+      break;
+    case 'i':
+      uart_print("Motor initial state\r\n");
+      motor_disable();
+      break;
+    case 'f':
+      uart_print("Motor Forward\r\n");
+      speed=10;
+      motor_set_left(speed);
+      motor_set_right(speed);
+      break;
+    case 'b':
+      uart_print("Motor Backward\r\n");
+      speed=-10;
+      motor_set_right(speed);
+      motor_set_left(speed);
+      break;
+    case '[':
+      uart_print("Motor -\r\n");
+      speed-=10;
+      motor_set_left(speed);
+      motor_set_right(speed);
+      break;
+    case ']':
+      uart_print("Motor +\r\n");
+      speed+=10;
+      motor_set_left(speed);
+      motor_set_right(speed);
+      break;
+    case 'p':
+      uart_print("Motor position\r\n");
+      uart_printx(&encoder_l_pos,4);
+      uart_print("\r\n");
+      uart_printx(&encoder_r_pos,4);
+      uart_print("\r\n");
+      break;
+    case 's':
+      uart_print("Motor speed\r\n");
+      uart_printx(&encoder_l_t,4);
+      uart_print("\r\n");
+      uart_printx(&encoder_r_t,4);
+      uart_print("\r\n");
+      break;
+    case 't':
+      uart_print("Time\r\n");
+      uint32_t tm;
+      tm=WALLTIME;
+      uart_printx(&tm,4);
+      uart_print("\r\n");
+      break;
+    default:
+      uart_print("What?\r\n");
+    }
   }
 }
 

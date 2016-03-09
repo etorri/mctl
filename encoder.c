@@ -3,38 +3,36 @@
 #include "clock.h"
 #include "encoder.h"
 
-volatile uint8_t encoder_event;
 volatile uint32_t encoder_l_t, encoder_r_t; 
+volatile uint32_t l_prev,r_prev;
+
 volatile int32_t encoder_l_pos,encoder_r_pos;
 
-static uint32_t l_prev,r_prev,l_now,r_now;
 
 // Encoder interrupts
 // left P1.3
 // right P1.7
 //
 void encoder_init(void){
-  encoder_l_t= encoder_r_t = 0xffffffff;
+  // initialize these just in case
+  encoder_l_pos = encoder_r_pos = 0;
+  encoder_l_t= encoder_r_t = 0;
+  // no interrupts yet
+  // initialize the previous time at 0 so first interrupt will get very long measure
   l_prev= r_prev = WALLTIME;
-  P1IE |= BIT3|BIT7;
-  P1REN |= BIT3|BIT7;
-  encoder_event=0;
-  
-  //P1OUT |= BIT3|BIT7;
+  P1DIR &= ~(BIT4|BIT5|BIT6|BIT7);
+  // enable encoder input pin interrupts
+  P1IE |= BIT4|BIT7;
 }
 
 
-void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
-  if(P1IFG&BIT3) {
-    l_now=WALLTIME;
-    encoder_l_t=timediff(l_now,l_prev);
-    l_prev=l_now;
-    P1IFG &= ~BIT3;
+void encoder_machine(void){
+  static uint32_t now;
+  now=WALLTIME;
+  if(timediff(now,l_prev)>0xFFFF){
+    encoder_l_t=NOT_MOVING;
   }
-  if(P1IFG&BIT7) {
-    r_now=WALLTIME;
-    encoder_r_t=timediff(r_now,r_prev);
-    r_prev=r_now;
-    P1IFG &= ~BIT7;
+  if(timediff(now,r_prev)>0xFFFF){
+    encoder_r_t=NOT_MOVING;
   }
 }
