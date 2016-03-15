@@ -1,10 +1,10 @@
 
 CC=msp430-gcc
-CFLAGS=-O3  -mmcu=msp430g2553 -Wall
+CFLAGS=-O3 -finline-functions -mmcu=msp430g2553 -Wall
 #CFLAGS=-mmcu=msp430g2553 -Wall
 
 
-DEPS=mctl.o pwm.o uart.o clock.o encoder.o buffer.o motor.o interrupts.o protocols.o
+DEPS=mctl.o pwm.o uart.o clock.o  buffer.o motor.o interrupts.o protocols.o
 BIN=mctl
 
 mctl: $(DEPS)

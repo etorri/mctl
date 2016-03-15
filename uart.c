@@ -1,10 +1,9 @@
 #include <msp430g2553.h>
 #include <inttypes.h>
+#include "clock.h"
 #include "uart.h"
 #include "buffer.h"
 #include "motor.h"
-#include "encoder.h"
-#include "clock.h"
 
 volatile struct CircularBuffer txbuf;
 volatile struct CircularBuffer rxbuf;
@@ -50,21 +49,45 @@ void uart_init(void) {
   UCA0CTL0  = 0x00;
   UCA0CTL1 |= UCSSEL_2; // SMCLK
   // 9600 timings with oversampling
-
+  /*
   UCA0BR0   = 104;
   UCA0BR1   = 0;
   UCA0MCTL  = UCBRF(3)| UCBRS(0) | UCOS16;
+  */
   // 115200 timings with oversampling
-  /*
   UCA0BR0   = 8; // divider low byte
   UCA0BR1   = 0; // divider high byte
   // baud rate modulation bits (UCB) and oversampling
   UCA0MCTL  = UCBRF(11)| UCBRS(0) | UCOS16;
-  */
+
   UCA0CTL1 &= ~UCSWRST; // release reset
   // Enable rx interrupt
   //IE2 |= UCA0RXIE|UCA0TXIE;
 }
+
+
+// uart TX ready for next byte ISR
+void __attribute__((interrupt (USCIAB0TX_VECTOR)))
+uart_tx_isr(void) {
+  static uint8_t c;
+  if(get_buf(&txbuf,&c)) {
+    // got nothing to send, stop interrupting 
+    IE2 &= ~UCA0TXIE;
+  } else {
+    // got byte from the buffer, send it out
+    UCA0TXBUF=c;
+  }
+}
+
+
+// received a byte, get it (and clear the interrupt), put it to rx buffer
+void __attribute__((interrupt (USCIAB0RX_VECTOR)))
+uart_rx_isr(void) {
+  static uint8_t c;
+  c=UCA0RXBUF;
+  put_buf(&rxbuf,&c);
+}
+
 
 
 

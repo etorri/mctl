@@ -1,36 +1,12 @@
+#ifndef MOTOR_H
+#define MOTOR_H
 
-// all other communication with the motor
-// happens through sending messages and reading
-// the state
-extern void motor_init(void);
+// ---------------- Encoder definitions -------
 
-// state of the motor state machine
-extern volatile uint8_t motor_state;
-
-// bitfield of messages sent to the motor state machine
-extern volatile uint8_t motor_msg;
-
-// power setting communicated through these
-extern volatile int left_power;
-extern volatile int right_power;
-
-// Motor control ports
-// left INA port 2.0
-#define LINA BIT0
-// left INB port 2.2
-#define LINB BIT2
-// left ENA port 1.0
-#define LENA BIT0
-// left DIAG port 1.3
-#define LDIAG BIT3
-// right INA port 2.3
-#define RINA BIT3
-// right INB port 2.5
-#define RINB BIT5
-// right ENA port 2.6
-#define RENA BIT6
-// right DIAG port 2.7
-#define RDIAG BIT7
+// If the time between encoder interrupts is longer than what fits in 16-bit signed int
+// it is considered "infinite". This is signalled to Pi as 0 because the interval can never
+// practically be zero.
+#define ENCODER_INF (0xFFFF>>1)
 
 //  --------------- Motor states --------------
 // Ready to go
@@ -42,7 +18,7 @@ extern volatile int right_power;
 // motor driver signalled failure
 #define MSTATE_FAIL     4
 
-// ---------------- Letters to motor ----------
+// ---------------- messages to motor ----------
 // apply the left and right motor power settings
 #define MMSG_POWER      1
 // Stop right here now 
@@ -54,3 +30,24 @@ extern volatile int right_power;
 // No new power settings from Pi for long time
 // so it is best to stop slowly and wait
 #define MMSG_TIMEOUT   16
+
+// read state of the motor state machine
+extern volatile uint8_t motor_state;
+// bitfield of messages sent to the motor state machine
+extern volatile uint8_t motor_msg;
+// power setting communicated through these
+extern volatile int16_t left_power_in;
+extern volatile int16_t right_power_in;
+
+
+extern void motor_init(void);
+extern void motor_machine(void);
+
+extern void get_lr_speed(int16_t *l, int16_t *r);
+
+
+
+
+
+
+#endif
