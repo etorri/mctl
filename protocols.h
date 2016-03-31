@@ -1,14 +1,23 @@
 #ifndef PROTOCOLS_H
 #define PROTOCOLS_H
 
+#ifndef TEST
 #include <msp430g2553.h>
+#else
+#include <stdio.h>
+#endif
 #include <inttypes.h>
 #include "buffer.h"
 #include "motor.h"
 #include "clock.h"
 #include "uart.h"
 
-#define REPORT_INTERVAL 4000000
+
+#ifdef TEST
+#define REPORT_INTERVAL 10000
+#else
+#define REPORT_INTERVAL 20000
+#endif
 
 /*
 // ---------------- messages to controller ----------
@@ -28,8 +37,16 @@
 #define MMSG_REPORT     49
 
 
-extern void protocol_init(void);
-extern uint8_t input_scanner(void);
+// packet start stop values
+#define C_START  0xFF
+#define C_END    0x00
+
+// Maximum length for input message
+#define MAXLEN   5
+
+
+extern void protocols_init(void);
+extern void input_scanner(void);
 extern void reporter(void);
 
 #endif

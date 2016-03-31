@@ -1,4 +1,6 @@
+#ifndef TEST
 #include <msp430g2553.h>
+#endif
 #include <inttypes.h>
 #include "buffer.h"
 
@@ -18,7 +20,7 @@ void init_buf(volatile struct CircularBuffer *b){
 uint8_t put_buf(volatile struct CircularBuffer *b, uint8_t *c) {
   uint8_t of;
   of=1; // assume it would overflow
-  // if adding the byte would cause head==tail then this would be overflow
+  // (head+1)==tail  is overflow
   if(MOD16(b->head+1)!=(b->tail)) {
     b->data[b->head] = *c;
     b->head = MOD16(b->head+1);

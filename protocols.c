@@ -1,6 +1,8 @@
 #include "protocols.h"
 #include "motor.h"
+#ifndef TEST
 #include <msp430g2553.h>
+#endif
 #include <inttypes.h>
 
 // ****************************************************************************************
@@ -47,92 +49,74 @@ add_to_crc(uint8_t c, uint8_t *crc){
 #define S_DATA   3 // read data
 #define S_CKSUM  4 // read checksum and end char, validate cksum and delegate the result
 
-#define C_START  0x01
-#define C_END    0x00
-
-// Maximum length for input message
-#define MAXLEN   5
 
 
-static uint8_t scanner_state=S_INIT;
-static uint8_t datalen;
-static uint8_t dataidx;
-static uint8_t indata[MAXLEN];
-static uint8_t rx_cksum;
-
-uint8_t input_scanner(void){
+void input_scanner(void){
      uint8_t c;
-     uint8_t packet_ready=0;
-     switch(scanner_state){
-     case S_INIT:
-	  break;
-     case S_START:
-	  if(uart_async_get_uint8(&c)){
-	       if(c==C_START){
-		    scanner_state=S_LEN;
-		    rx_crc=0;
-	       } else
-		    scanner_state=S_START;
-	  }
-	  break;
-     case S_LEN:
-	  if(uart_async_get_uint8(&c)){
-	       add_to_crc(c,&rx_crc);
-	       datalen=c;
-	       dataidx=0;
-	       if(datalen<MAXLEN)
-		    scanner_state=S_DATA;
-	       else
-		    scanner_state=S_START;
-	  }
-	  break;
-     case S_DATA:
-	  if(uart_async_get_uint8(&c)){
-	       add_to_crc(c,&rx_crc);
-	       if(datalen--)
-		    indata[dataidx++]=c;
-	       else {
-		    scanner_state=S_CKSUM;
-		    datalen=0;
-	       }
-	  }
-	  break;
-     case S_CKSUM:
-	  if(uart_async_get_uint8(&c)){
-	       switch(datalen++){
-	       case 0:
-		    // scan next packet if the cksum does not match
-		    if(c!=rx_crc)
-			 scanner_state=S_START;
-		    break;
-	       case 1:
-		    // tell back that the packet is ready
-		    if(c==C_END)
-			 packet_ready=1;
-		    scanner_state=S_START;
-	       default:
-		    scanner_state=S_INIT;
-	       }
-	  }
-     default:
-	  scanner_state=S_INIT;
+     static uint8_t scanner_state=S_INIT;
+     static uint8_t *dp;
+     static uint8_t i;
+     if(uart_async_get_uint8(&c)){
+       switch(scanner_state){
+       case S_INIT:
+	 scanner_state=S_START;
+	 break;
+       case S_START:
+	 if(c==C_START){
+	   scanner_state=S_LEN;
+	 } 
+	 break;
+
+       case S_LEN:
+	 if(c==5){
+	   i=0;
+	   rx_crc=0;
+	   dp=(uint8_t *) &m_in;
+	   scanner_state=S_DATA;
+	 }
+	 else {
+	   scanner_state=S_START;
+	   m_out.error=2;
+	 }
+	 break;
+
+       case S_DATA:
+	 //add_to_crc(c,&rx_crc);
+	 if(i<4){
+	   dp[i] = c;
+	   i++;
+	 } else {
+	   dp[i]=c;
+	   scanner_state=S_CKSUM;
+	   i=0;
+	 }
+	 break;
+
+       case S_CKSUM:
+	 switch(i++){
+	 case 0:
+	   // scan next packet if the cksum does not match
+	   //if(c!=rx_crc)
+	   //scanner_state=S_START;
+	   break;
+
+	 case 1:
+	   if(c==C_END) {
+	     m_out.error++;
+	     mmsg=m_in.msg;
+	   } else {
+	     m_out.error=c;
+	   }
+	   scanner_state=S_START;
+	   break;
+	 } // datalen
+	 break;
+       } // scanner_state
      }
-     return packet_ready;
 }
 		    
-void process_packet(void){
-     switch(indata[0]){
-     case MMSG_POWER:
-	  left_power_in=(int16_t)(indata[1]|(indata[2]<<8));
-	  right_power_in=(int16_t)(indata[3]|(indata[4]<<8));
-	  break;
-     case MMSG_STOP:
-     case MMSG_FAIL:
-     case MMSG_CLEAR:
-     case MMSG_TIMEOUT:
-	  motor_msg=indata[0];
-     }
-}
+
+
 
 // ---------------- messages to Pi ----------
 // Status report to the Pi (motor state, direction, speed, position)
@@ -142,15 +126,41 @@ void process_packet(void){
 // timer for sending status report every second
 static uint32_t report_timer=0;
 
+
+static inline void out1(uint8_t b) {
+  add_to_crc(b,&tx_crc);
+  uart_write(b);
+}
+
+
+static inline void out_n(void *lw, uint8_t n){
+  uint8_t i;
+  uint8_t c;
+  for(i=0;i<n;i++){
+    c= ((uint8_t *)lw)[i];
+    add_to_crc(c,&tx_crc);
+    uart_write(c);
+  }
+}
+
+
+
 void reporter(void){
-     int16_t inv_speed;
-     uint32_t tmp32;
-     // the regular report has priority
-     if(interval_elapsed(&report_timer,REPORT_INTERVAL)){
-	  tx_crc=0;
-	  uart_write(S_START);
-	  uart_write(MMSG_REPORT);
-	  uart_write(motor_state);
-     }
+  // the regular report has priority
+  if(interval_elapsed(&report_timer,REPORT_INTERVAL)){
+    tx_crc=0;
+    out1(C_START);
+    out1(sizeof(motor_out));
+    out_n(&m_out,sizeof(motor_out));
+    out1(tx_crc);
+    out1(C_END);
+  }
 	  
+}
+
+void protocols_init(void){
+  m_out.msg=MMSG_REPORT;
+#ifdef TEST
+  report_timer=wall_time();
+#endif
 }

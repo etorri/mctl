@@ -25,60 +25,46 @@
 #define RDIAG BIT7
 
 
-// motor control variables
-volatile uint8_t motor_state;
-volatile uint8_t motor_msg;
-volatile int16_t left_power_in;
+
+// communication to/from the motor
+motor_in m_in;
+motor_out m_out;
+
+volatile uint8_t mmsg=0;
+
+// internal motor control variables
 static   int16_t left_power;  
-volatile int16_t right_power_in;
 static   int16_t right_power;
-uint32_t power_timer;
+// timeout timer to detect broken communication with pi
+static  uint32_t power_timer;
 
-// encoder position visible outside
-volatile int32_t encoder_l_pos,encoder_r_pos;
-
-// encoder control variables
+// internal encoder timing variables
+// set by the interrupts
 static volatile uint32_t encoder_l_t, encoder_r_t; 
 static volatile uint32_t l_prev,r_prev;
 // direction 1=forward, 0=stopped, -1=backward
+// set by the interrupts
 volatile int8_t encoder_l_dir;
 volatile int8_t encoder_r_dir;
 
 
 
 // ---------------------- ENCODER ------------------------
-// Encoder interrupts
-// left P1.3
-// right P1.7
 //
 void encoder_init(void){
   // initialize these just in case
-  encoder_l_pos = encoder_r_pos = 0;
+  m_out.l_pos = m_out.r_pos = 0;
   encoder_l_t= encoder_r_t = 0;
-  // no interrupts yet
   // initialize the previous time at 0
   l_prev= r_prev = 0;
+  // encoder pins as inputs
   P1DIR &= ~(BIT4|BIT5|BIT6|BIT7);
-  // enable encoder input pin interrupts
+  // enable ENC-A pins as interrupts (low->high)
   P1IE |= BIT4|BIT7;
 }
 
 
 
-
-void get_lr_speed(int16_t *l, int16_t *r){
-  uint32_t now;
-  now=wall_time();
-  if((encoder_l_t>ENCODER_INF) || (timediff(now,l_prev)>ENCODER_INF))
-    *l=0;
-  else
-    *l=encoder_l_t;
-
-  if((encoder_r_t>ENCODER_INF) || (timediff(now,r_prev)>ENCODER_INF))
-    *r=0;
-  else
-    *r=encoder_r_t;
-}
 
 // max 1 second without power setting commands from Pi
 // in RUN state
@@ -98,8 +84,8 @@ motor_init(void) {
   P2SEL  &= ~(LINA|LINB|RINA|RINB);
   P2SEL2 &= ~(LINA|LINB|RINA|RINB);
   // initialize variables
-  motor_state=MSTATE_READY;
-  motor_msg=0;
+  m_out.state=MSTATE_READY;
+  m_in.msg=0;
   // do what is needed to enter the READY state
   motor_ready();
   encoder_init();
@@ -156,47 +142,51 @@ motor_set_power(void){
 
 
 
-void motor_machine(void) {
-  switch(motor_state){
+void motor_step(void) {
+  uint32_t now;
+  now=wall_time();
+  
+  // ---------- Handle input events
+  switch(m_out.state){
   case MSTATE_READY:
-    if(motor_msg&MMSG_FAIL){
+    if(mmsg&MMSG_FAIL){
       motor_ready();
-      motor_state=MSTATE_FAIL;
-    } else if(motor_msg&MMSG_POWER) {
-      left_power=left_power_in;
-      right_power=right_power_in;
+      m_out.state=MSTATE_FAIL;
+    } else if(mmsg&MMSG_POWER) {
+      left_power=m_in.l_pwr;
+      right_power=m_in.r_pwr;
       motor_set_power();
       set_timer(&power_timer);
-      motor_state=MSTATE_RUN;
+      m_out.state=MSTATE_RUN;
     }
-    motor_msg=0;
+    mmsg=0;
     break;
 	  
   case MSTATE_RUN:
     // if Pi is not talking frequently enough (dead?) stop everything
     // and do not keep driving towards the cliff
     if(interval_elapsed(&power_timer,MAX_POWER_SETTING_INTERVAL)){
-      motor_msg=MMSG_TIMEOUT; //motor_msg=MMSG_TIMEOUT;
+      mmsg=MMSG_TIMEOUT; //mmsg=MMSG_TIMEOUT;
     }
-    if(motor_msg&MMSG_FAIL) {
+    if(mmsg&MMSG_FAIL) {
       motor_ready();
-      motor_state=MSTATE_FAIL;
-      motor_msg=0;
-    } else if(motor_msg&MMSG_POWER) {
+      m_out.state=MSTATE_FAIL;
+      mmsg=0;
+    } else if(mmsg&MMSG_POWER) {
       set_timer(&power_timer);
-      left_power=left_power_in;
-      right_power=right_power_in;
+      left_power=m_in.l_pwr;
+      right_power=m_in.r_pwr;
       motor_set_left(left_power);
       motor_set_right(right_power);
-      motor_state=MSTATE_RUN;
-    } else if(motor_msg&MMSG_STOP) {
+      m_out.state=MSTATE_RUN;
+    } else if(mmsg&MMSG_STOP) {
       motor_ready();
-      motor_state=MSTATE_READY;
-    } else if(motor_msg&MMSG_TIMEOUT) {
-      motor_state=MSTATE_SLOWDOWN;
+      m_out.state=MSTATE_READY;
+    } else if(mmsg&MMSG_TIMEOUT) {
+      m_out.state=MSTATE_SLOWDOWN;
       set_timer(&power_timer);
     }
-    motor_msg=0;
+    mmsg=0;
     break;
 
   case MSTATE_SLOWDOWN:
@@ -209,25 +199,37 @@ void motor_machine(void) {
       }
       motor_set_power();
     }
-    if(motor_msg&MMSG_FAIL) {
+    if(mmsg&MMSG_FAIL) {
       motor_ready();
-      motor_state=MSTATE_FAIL;
-    } else if (motor_msg&MMSG_STOP) {
+      m_out.state=MSTATE_FAIL;
+    } else if (mmsg&MMSG_STOP) {
       // Clear the slowdown state
       motor_ready();
-      motor_state=MSTATE_READY;
+      m_out.state=MSTATE_READY;
     }
-    motor_msg=0;
+    mmsg=0;
     break;
 
   case MSTATE_FAIL:
-    if(motor_msg&MMSG_CLEAR){
-      motor_state=MSTATE_READY;
-      motor_msg=0;
+    if(mmsg&MMSG_CLEAR){
+      m_out.state=MSTATE_READY;
+      mmsg=0;
     }
     motor_ready();
     break;
   }
+
+  // ------------- Prepare outputs
+  if((encoder_l_t>ENCODER_INF) || (timediff(now,l_prev)>ENCODER_INF))
+    m_out.l_speed=0;
+  else
+    m_out.l_speed= encoder_l_t*encoder_l_dir;
+
+  if((encoder_r_t>ENCODER_INF) || (timediff(now,r_prev)>ENCODER_INF))
+    m_out.r_speed=0;
+  else
+    m_out.r_speed= encoder_r_t*encoder_r_dir;
+  
 }
 
 
@@ -247,10 +249,10 @@ void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
     // If LENCB also up then going forward
     if(P1IN&BIT5){
       encoder_l_dir=1;
-      encoder_l_pos++;
+      m_out.l_pos++;
     }else{
       encoder_l_dir=-1;
-      encoder_l_pos--;
+      m_out.l_pos--;
     }
     // Clear LENCA interrupt
     P1IFG &= ~BIT4;
@@ -264,10 +266,10 @@ void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
     // In right motor RENCA&RENCB means backwards
     if(P1IN&BIT6){
       encoder_r_dir=-1;
-      encoder_r_pos--;
+      m_out.r_pos--;
     }else{
       encoder_r_dir=1;
-      encoder_r_pos++;
+      m_out.r_pos++;
     }
     // Clear RENCA interrupt
     P1IFG &= ~BIT7;
@@ -275,7 +277,7 @@ void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
   if(P1IFG&BIT3){
     // Motor driver failure = LDIAG went down
     // the interrupt will be cleared only after CLEAR message
-    motor_msg|= MMSG_FAIL;
+    mmsg|= MMSG_FAIL;
   }
 }
 
@@ -283,6 +285,6 @@ void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
 void __attribute__((interrupt (PORT2_VECTOR))) p2isr() {
   // Motor driver failure = RDIAG went down
   if(P2IFG&BIT7){
-    motor_msg|=MMSG_FAIL;
+    mmsg|= MMSG_FAIL;
   }
 }

@@ -1,4 +1,6 @@
+#ifndef TEST
 #include <msp430g2553.h>
+#endif
 #include <inttypes.h>
 
 
