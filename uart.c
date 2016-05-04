@@ -62,7 +62,7 @@ void uart_init(void) {
 
   UCA0CTL1 &= ~UCSWRST; // release reset
   // Enable rx interrupt
-  //IE2 |= UCA0RXIE|UCA0TXIE;
+  IE2 |= UCA0RXIE;
 }
 
 

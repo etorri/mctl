@@ -1,40 +1,24 @@
 #ifndef MOTOR_H
 #define MOTOR_H
 
-// ---------------- Encoder definitions -------
-// If the time between encoder interrupts is longer than what fits in 16-bit signed int
-// it is considered "infinite". This is signalled to Pi as 0 because the interval can never
-// practically be zero.
-#define ENCODER_INF (0xFFFF>>1)
-
-
 //  --------------- Motor states --------------
-
 #define MSTATE_READY    1 // idle
 #define MSTATE_RUN      2 // running
-#define MSTATE_SLOWDOWN 3 // comm timeout, slowing to halt
 #define MSTATE_FAIL     4 // motor driver (or test) failure state
 
 // ---------------- messages to motor ----------
-
 #define MMSG_POWER      1 // pwm settings command
 #define MMSG_STOP       2 // stop
 #define MMSG_FAIL       4 // signal motor failure
 #define MMSG_CLEAR      8 // clear motor failure
-#define MMSG_TIMEOUT   16 // signal communication timeout
+// ---------------- messages to Pi ----------
+// Status report to the Pi (motor state, direction, speed, position)
+#define MMSG_REPORT     49
 
+// go to FAIL state from RUN state if not receiving power settings
+// with this interval = 1/10s ( < 16cm at full speed )
+#define MAX_POWER_SETTING_INTERVAL 1000000
 
-// max 1 second without power setting commands from Pi
-// in RUN state
-#ifdef TEST
-#define MAX_POWER_SETTING_INTERVAL 100000
-#else
-#define MAX_POWER_SETTING_INTERVAL 2000000
-#endif
-
-// when in slowdown state, tick down the pwm settings
-// with this interval
-#define SLOW_DOWN_INTERVAL         20000
 
 // Input message to the motor
 struct mi {
@@ -55,8 +39,7 @@ typedef struct mi motor_in;
 struct mo {
   volatile int32_t l_pos;  
   volatile int32_t r_pos;  
-  volatile int16_t l_speed;
-  volatile int16_t r_speed;
+  volatile uint32_t clock;
   volatile uint8_t msg;    
   volatile uint8_t state;  
   volatile uint8_t error;

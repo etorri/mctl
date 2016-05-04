@@ -1,23 +1,15 @@
-
 #include "clock.h"
 #include "pwm.h"
 #include "motor.h"
 #include "uart.h"
 #include "interrupts.h"
 #include "protocols.h"
-
-#ifndef TEST
 #include <msp430g2553.h>
-#endif
-#include <inttypes.h>
 
-#ifndef TEST
 #define PAUS __delay_cycles(1600000)
-#endif
+#define FOREVER while(1)
 
 int main(void) {
-
-#ifndef TEST
   WDTCTL = WDTPW + WDTHOLD;   // Stop WDT
   // configure the CPU clock (MCLK)
   // to run from SMCLK: DCO @ 16MHz and SMCLK = DCO
@@ -29,25 +21,19 @@ int main(void) {
   DCOCTL = 0;
   BCSCTL1= CALBC1_16MHZ;
   DCOCTL = CALDCO_16MHZ;
-#endif
   
   clock_init();
   uart_init();
   motor_init();
   protocols_init();
-
-#ifndef TEST
   pwm_init();
-  interrupts_init();
 
-  //protocol_init();
-  // -------------
-  //    action
-  // -------------
+  // ----------
+  // **action**
+  // ----------
   _BIS_SR(GIE);
-#endif
   
-  while(1){
+  FOREVER {
     // read input
     input_scanner();
     // handle any pending state changes in motor

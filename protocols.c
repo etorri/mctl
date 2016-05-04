@@ -1,20 +1,21 @@
 #include "protocols.h"
 #include "motor.h"
-#ifndef TEST
 #include <msp430g2553.h>
-#endif
-#include <inttypes.h>
+
+/*
+  TO DO: Use CRC in communication. Preferably CRC16
+  Currently it is ignored
+*/
+
 
 // ****************************************************************************************
 //  CRC8 from http://www.barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code
 //
-
 #define POLYNOMIAL 0x8b //CRC-8-WCDMA
 #define WIDTH  (8 * sizeof(crc))
 #define TOPBIT (1 << (WIDTH - 1))
 
 static uint8_t rx_crc, tx_crc;
-
 const uint8_t
 crcTable[256] = {0x00, 0x8b, 0x9d, 0x16, 0xb1, 0x3a, 0x2c, 0xa7, 0xe9, 0x62, 0x74, 0xff, 0x58, 0xd3, 0xc5, 0x4e, 
 	   0x59, 0xd2, 0xc4, 0x4f, 0xe8, 0x63, 0x75, 0xfe, 0xb0, 0x3b, 0x2d, 0xa6, 0x01, 0x8a, 0x9c, 0x17, 
@@ -68,7 +69,7 @@ void input_scanner(void){
 	 break;
 
        case S_LEN:
-	 if(c==5){
+	 if(c==sizeof(m_in)){
 	   i=0;
 	   rx_crc=0;
 	   dp=(uint8_t *) &m_in;
@@ -82,7 +83,7 @@ void input_scanner(void){
 
        case S_DATA:
 	 //add_to_crc(c,&rx_crc);
-	 if(i<4){
+	 if(i < (sizeof(m_in)-1) ){
 	   dp[i] = c;
 	   i++;
 	 } else {
@@ -116,16 +117,14 @@ void input_scanner(void){
 }
 		    
 
-
-
 // ---------------- messages to Pi ----------
-// Status report to the Pi (motor state, direction, speed, position)
+// Status report to the Pi (motor state, position)
 #define MMSG_REPORT     49
-	  
-	       
+       
 // timer for sending status report every second
 static uint32_t report_timer=0;
 
+uint32_t report_interval;
 
 static inline void out1(uint8_t b) {
   add_to_crc(b,&tx_crc);
@@ -144,23 +143,18 @@ static inline void out_n(void *lw, uint8_t n){
 }
 
 
-
 void reporter(void){
-  // the regular report has priority
-  if(interval_elapsed(&report_timer,REPORT_INTERVAL)){
+  if(interval_elapsed(&report_timer,report_interval)){
     tx_crc=0;
+    m_out.clock = wall_time(); // add timestamp
     out1(C_START);
     out1(sizeof(motor_out));
     out_n(&m_out,sizeof(motor_out));
     out1(tx_crc);
     out1(C_END);
-  }
-	  
+  }	  
 }
 
 void protocols_init(void){
   m_out.msg=MMSG_REPORT;
-#ifdef TEST
-  report_timer=wall_time();
-#endif
 }

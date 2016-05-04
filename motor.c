@@ -11,18 +11,20 @@
 #define LINA BIT0
 // left INB port 2.2
 #define LINB BIT2
-// left ENA port 1.0
-#define LENA BIT0
-// left DIAG port 1.3
+// left DIAG port 2.6
 #define LDIAG BIT3
 // right INA port 2.3
 #define RINA BIT3
 // right INB port 2.5
 #define RINB BIT5
-// right ENA port 2.6
-#define RENA BIT6
 // right DIAG port 2.7
 #define RDIAG BIT7
+
+// -- not used
+// right ENA port 2.6
+// #define RENA BIT6
+// left ENA port 1.0
+// #define LENA BIT0
 
 
 
@@ -61,21 +63,18 @@ void encoder_init(void){
   P1DIR &= ~(BIT4|BIT5|BIT6|BIT7);
   // enable ENC-A pins as interrupts (low->high)
   P1IE |= BIT4|BIT7;
+  // DIAG pins interrupt when going high to low
+  P2IE |= (BIT6|BIT7); // LDIAG,RDIAG
+  P2IES|= (BIT6|BIT7);
+  
 }
-
-
-
 
 // max 1 second without power setting commands from Pi
 // in RUN state
-#define MAX_POWER_SETTING_INTERVAL 8000000
-// in Slow
-#define SLOW_DOWN_INTERVAL         20000
-
+//#define MAX_POWER_SETTING_INTERVAL 8000000
 
 static inline void motor_set_power(void);
 static inline void motor_ready(void);
-
 
 void
 motor_init(void) {
@@ -89,8 +88,9 @@ motor_init(void) {
   // do what is needed to enter the READY state
   motor_ready();
   encoder_init();
+  // start with READY state so reporting interval is longer
+  report_interval=READY_REPORT_INTERVAL;
 }
-
 
 static inline void
 motor_ready(void){
@@ -101,10 +101,6 @@ motor_ready(void){
   P2OUT &= ~(LINA|LINB|RINA|RINB);
 }
 
-
-
-
- 
 static inline void
 motor_set_left(int power) {
   int8_t sgn;
@@ -119,7 +115,6 @@ motor_set_left(int power) {
   }
   pwm_l_set(power);
 }
-
 
 static inline void
 motor_set_right(int power) {
@@ -141,24 +136,25 @@ motor_set_power(void){
 }
 
 
-
+// ------- Motor controller state machine -------
+//
 void motor_step(void) {
-  uint32_t now;
-  now=wall_time();
-  
-  // ---------- Handle input events
   switch(m_out.state){
   case MSTATE_READY:
+    // inputs
     if(mmsg&MMSG_FAIL){
       motor_ready();
       m_out.state=MSTATE_FAIL;
+      report_interval=RUN_REPORT_INTERVAL;
     } else if(mmsg&MMSG_POWER) {
       left_power=m_in.l_pwr;
       right_power=m_in.r_pwr;
       motor_set_power();
       set_timer(&power_timer);
       m_out.state=MSTATE_RUN;
+      report_interval=RUN_REPORT_INTERVAL;
     }
+    // clear inputs
     mmsg=0;
     break;
 	  
@@ -166,8 +162,9 @@ void motor_step(void) {
     // if Pi is not talking frequently enough (dead?) stop everything
     // and do not keep driving towards the cliff
     if(interval_elapsed(&power_timer,MAX_POWER_SETTING_INTERVAL)){
-      mmsg=MMSG_TIMEOUT; //mmsg=MMSG_TIMEOUT;
+      mmsg=MMSG_FAIL;
     }
+    // inputs
     if(mmsg&MMSG_FAIL) {
       motor_ready();
       m_out.state=MSTATE_FAIL;
@@ -182,109 +179,74 @@ void motor_step(void) {
     } else if(mmsg&MMSG_STOP) {
       motor_ready();
       m_out.state=MSTATE_READY;
-    } else if(mmsg&MMSG_TIMEOUT) {
-      m_out.state=MSTATE_SLOWDOWN;
-      set_timer(&power_timer);
+      report_interval=READY_REPORT_INTERVAL;
     }
-    mmsg=0;
-    break;
-
-  case MSTATE_SLOWDOWN:
-    if(interval_elapsed(&power_timer,SLOW_DOWN_INTERVAL)){
-      if(left_power!=0){
-	left_power += (left_power<0)?1:-1;
-      }
-      if(right_power!=0){
-	right_power += (right_power<0)?1:-1;
-      }
-      motor_set_power();
-    }
-    if(mmsg&MMSG_FAIL) {
-      motor_ready();
-      m_out.state=MSTATE_FAIL;
-    } else if (mmsg&MMSG_STOP) {
-      // Clear the slowdown state
-      motor_ready();
-      m_out.state=MSTATE_READY;
-    }
+    // clear inputs
     mmsg=0;
     break;
 
   case MSTATE_FAIL:
+    // inputs
     if(mmsg&MMSG_CLEAR){
       m_out.state=MSTATE_READY;
-      mmsg=0;
+      report_interval=READY_REPORT_INTERVAL;
     }
+    // clear inputs and keep steady 
+    mmsg=0;
     motor_ready();
     break;
   }
-
-  // ------------- Prepare outputs
-  if((encoder_l_t>ENCODER_INF) || (timediff(now,l_prev)>ENCODER_INF))
-    m_out.l_speed=0;
-  else
-    m_out.l_speed= encoder_l_t*encoder_l_dir;
-
-  if((encoder_r_t>ENCODER_INF) || (timediff(now,r_prev)>ENCODER_INF))
-    m_out.r_speed=0;
-  else
-    m_out.r_speed= encoder_r_t*encoder_r_dir;
-  
 }
+
+/* Note:
+   TODO: The mmsg should be handled as a bit field
+
+   For MMSG_FAIL it should be cleared (mmsg=0) after changing the state to FAIL
+   to ignore any other messages
+
+   For others just clear that single flag i.e.  mmsg&= ~MMSG_STOP
+
+   Currently the MMSG_FAIL can be masked by power setting for example
+*/
 
 
 // ------------------ Interrupt Service Routines --------------
 //
-
-
+// Port 1 = Left Encoder A&B, Right Encoder A&B
+//
 void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
-  static uint32_t time_now;
-  time_now=wall_time();
-
-  // Left motor LENCA went up
+  // Left motor L-ENC-A (1.4) active
   if(P1IFG&BIT4) {
-    // LENCA Left encoder A input
-    encoder_l_t=timediff(time_now,l_prev);
-    l_prev=time_now;
-    // If LENCB also up then going forward
+    // If L-ENC-B also up then going forward
     if(P1IN&BIT5){
-      encoder_l_dir=1;
       m_out.l_pos++;
     }else{
-      encoder_l_dir=-1;
       m_out.l_pos--;
     }
     // Clear LENCA interrupt
     P1IFG &= ~BIT4;
   }
-  
-  // Right motor encoders
+  // R-ENC-A (1.7) active
   if(P1IFG&BIT7) {
-    // Right motor RENCA went up
-    encoder_r_t=timediff(time_now,r_prev);
-    r_prev=time_now;
-    // In right motor RENCA&RENCB means backwards
+    // In right motor R-ENC-A and R-ENC-B means backwards
     if(P1IN&BIT6){
-      encoder_r_dir=-1;
       m_out.r_pos--;
     }else{
-      encoder_r_dir=1;
       m_out.r_pos++;
     }
     // Clear RENCA interrupt
     P1IFG &= ~BIT7;
-  }  
-  if(P1IFG&BIT3){
-    // Motor driver failure = LDIAG went down
-    // the interrupt will be cleared only after CLEAR message
-    mmsg|= MMSG_FAIL;
   }
 }
 
-
+// Port 2:  R-DIAG @2.7, L-DIAG @2.6
 void __attribute__((interrupt (PORT2_VECTOR))) p2isr() {
-  // Motor driver failure = RDIAG went down
-  if(P2IFG&BIT7){
+  // RDIAG went down = Right motor fail
+  if(P2IFG & RDIAG){
+    mmsg|= MMSG_FAIL;
+  }
+  // L-DIAG (2.6) went down = Left motor fail
+  if(P2IFG & LDIAG){
     mmsg|= MMSG_FAIL;
   }
 }
