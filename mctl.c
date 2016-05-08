@@ -9,35 +9,49 @@
 #define PAUS __delay_cycles(1600000)
 #define FOREVER while(1)
 
+// Watchdog controls
+#define WD_HOLD  WDTCTL = (WDTPW|WDTHOLD)
+// Clear, select VLO clock (4KHz..20Khz, nominal 12KHz), divide by 8192
+#define WD_CLEAR WDTCTL = WD_HOLD
+// WDT_ARST_1000
+// (WDTPW|WDTCNTCL|WDTSSEL_2|WDTIS_2)
+
+
 int main(void) {
-  WDTCTL = WDTPW + WDTHOLD;   // Stop WDT
+  WD_HOLD;
   // configure the CPU clock (MCLK)
   // to run from SMCLK: DCO @ 16MHz and SMCLK = DCO
   // If no DCO calibration => stop here by loop
   if(CALBC1_16MHZ==0xff)
     while(1)
       _NOP();
+
+  // ------- without interrupts
   _BIC_SR(GIE);
-  DCOCTL = 0;
+  //DCOCTL = 0;
   BCSCTL1= CALBC1_16MHZ;
   DCOCTL = CALDCO_16MHZ;
-  
+  //BCSCTL3= LFXT1S_2;     // VLO source
+  PAUS;
+  // initialize modules
   clock_init();
-  uart_init();
-  motor_init();
-  protocols_init();
   pwm_init();
+  motor_init();
+  uart_init();
+  protocols_init();
 
-  // ----------
-  // **action**
-  // ----------
+  // ------- interrupts enabled 
   _BIS_SR(GIE);
+  WD_CLEAR;
   
   FOREVER {
+    WD_CLEAR;
     // read input
     input_scanner();
-    // handle any pending state changes in motor
+    WD_CLEAR;
+    // handle any pending state changes and messages to motor
     motor_step();
+    WD_CLEAR;
     // send status reports to pi
     reporter();
   }

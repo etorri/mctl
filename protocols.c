@@ -103,10 +103,10 @@ void input_scanner(void){
 
 	 case 1:
 	   if(c==C_END) {
-	     m_out.error++;
 	     mmsg=m_in.msg;
+	     m_out.error=3;
 	   } else {
-	     m_out.error=c;
+	     m_out.error=1;
 	   }
 	   scanner_state=S_START;
 	   break;
@@ -128,7 +128,7 @@ uint32_t report_interval;
 
 static inline void out1(uint8_t b) {
   add_to_crc(b,&tx_crc);
-  uart_write(b);
+  uart_put_uint8(b);
 }
 
 
@@ -138,7 +138,7 @@ static inline void out_n(void *lw, uint8_t n){
   for(i=0;i<n;i++){
     c= ((uint8_t *)lw)[i];
     add_to_crc(c,&tx_crc);
-    uart_write(c);
+    uart_put_uint8(c);
   }
 }
 

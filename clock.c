@@ -15,7 +15,7 @@ void clock_init() {
 // increase the high 16 bits of wall clock when the the timer overflows
 void __attribute__((interrupt (TIMER0_A1_VECTOR)))
 ta0cc0_isr() {
-  TA0CTL &= ~TAIFG;
   wallclock_h++;
+  TA0CTL &= ~TAIFG;
 }
 

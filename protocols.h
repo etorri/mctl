@@ -11,7 +11,7 @@
 // Reporting interval when in RUN or FAIL states = 1/100 2
 #define RUN_REPORT_INTERVAL   200000
 // when idling = 1s
-#define READY_REPORT_INTERVAL   2000
+#define READY_REPORT_INTERVAL   2000000
 
 extern uint32_t report_interval;
 

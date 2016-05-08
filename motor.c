@@ -12,7 +12,7 @@
 // left INB port 2.2
 #define LINB BIT2
 // left DIAG port 2.6
-#define LDIAG BIT3
+#define LDIAG BIT6
 // right INA port 2.3
 #define RINA BIT3
 // right INB port 2.5
@@ -20,13 +20,11 @@
 // right DIAG port 2.7
 #define RDIAG BIT7
 
-// -- not used
-// right ENA port 2.6
-// #define RENA BIT6
-// left ENA port 1.0
-// #define LENA BIT0
-
-
+// Encoder pins at port 1
+#define LENCA BIT5
+#define LENCB BIT4
+#define RENCA BIT6
+#define RENCB BIT7
 
 // communication to/from the motor
 motor_in m_in;
@@ -49,9 +47,13 @@ static volatile uint32_t l_prev,r_prev;
 volatile int8_t encoder_l_dir;
 volatile int8_t encoder_r_dir;
 
+// forward definitions
+static inline void motor_set_power(void);
+static inline void motor_ready(void);
 
 
-// ---------------------- ENCODER ------------------------
+
+// ---------------------- Initializations ------------------------
 //
 void encoder_init(void){
   // initialize these just in case
@@ -59,22 +61,17 @@ void encoder_init(void){
   encoder_l_t= encoder_r_t = 0;
   // initialize the previous time at 0
   l_prev= r_prev = 0;
-  // encoder pins as inputs
-  P1DIR &= ~(BIT4|BIT5|BIT6|BIT7);
-  // enable ENC-A pins as interrupts (low->high)
-  P1IE |= BIT4|BIT7;
-  // DIAG pins interrupt when going high to low
-  P2IE |= (BIT6|BIT7); // LDIAG,RDIAG
-  P2IES|= (BIT6|BIT7);
+  // Encoder pins
+  P1DIR &= ~(LENCA|LENCB|RENCA|RENCB); // as inputs
+  P1IE |= RENCA|LENCA;                 // as interrupts (low->high)
+  // DIAG pins
+  P2DIR &= ~(LDIAG|RDIAG);             // as input
+  //P2IE |= (LDIAG|RDIAG);               // enable interrupt at high->low
+  //P2IES|= (LDIAG|RDIAG);
   
 }
 
-// max 1 second without power setting commands from Pi
-// in RUN state
-//#define MAX_POWER_SETTING_INTERVAL 8000000
 
-static inline void motor_set_power(void);
-static inline void motor_ready(void);
 
 void
 motor_init(void) {
@@ -91,6 +88,11 @@ motor_init(void) {
   // start with READY state so reporting interval is longer
   report_interval=READY_REPORT_INTERVAL;
 }
+
+
+
+// ---------------------- Motor helper routines ------------------------
+//
 
 static inline void
 motor_ready(void){
@@ -136,8 +138,10 @@ motor_set_power(void){
 }
 
 
+
 // ------- Motor controller state machine -------
 //
+
 void motor_step(void) {
   switch(m_out.state){
   case MSTATE_READY:
@@ -145,7 +149,7 @@ void motor_step(void) {
     if(mmsg&MMSG_FAIL){
       motor_ready();
       m_out.state=MSTATE_FAIL;
-      report_interval=RUN_REPORT_INTERVAL;
+      report_interval=READY_REPORT_INTERVAL;
     } else if(mmsg&MMSG_POWER) {
       left_power=m_in.l_pwr;
       right_power=m_in.r_pwr;
@@ -167,6 +171,7 @@ void motor_step(void) {
     // inputs
     if(mmsg&MMSG_FAIL) {
       motor_ready();
+      report_interval=READY_REPORT_INTERVAL;
       m_out.state=MSTATE_FAIL;
       mmsg=0;
     } else if(mmsg&MMSG_POWER) {
@@ -200,53 +205,52 @@ void motor_step(void) {
 
 /* Note:
    TODO: The mmsg should be handled as a bit field
-
    For MMSG_FAIL it should be cleared (mmsg=0) after changing the state to FAIL
    to ignore any other messages
-
    For others just clear that single flag i.e.  mmsg&= ~MMSG_STOP
-
    Currently the MMSG_FAIL can be masked by power setting for example
 */
 
 
 // ------------------ Interrupt Service Routines --------------
-//
-// Port 1 = Left Encoder A&B, Right Encoder A&B
-//
+
+
+// Encoders as port 1
 void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
-  // Left motor L-ENC-A (1.4) active
-  if(P1IFG&BIT4) {
+  // Left encoder interrupt
+  if(P1IFG & LENCA) {
     // If L-ENC-B also up then going forward
-    if(P1IN&BIT5){
+    if(P1IN & LENCB){
       m_out.l_pos++;
     }else{
       m_out.l_pos--;
     }
     // Clear LENCA interrupt
-    P1IFG &= ~BIT4;
+    P1IFG &= ~LENCA;
   }
-  // R-ENC-A (1.7) active
-  if(P1IFG&BIT7) {
+  // Right encoder interrupt
+  if(P1IFG & RENCA) {
     // In right motor R-ENC-A and R-ENC-B means backwards
-    if(P1IN&BIT6){
+    if(P1IN & RENCB){
       m_out.r_pos--;
     }else{
       m_out.r_pos++;
     }
     // Clear RENCA interrupt
-    P1IFG &= ~BIT7;
+    P1IFG &= ~RENCA;
   }
 }
 
-// Port 2:  R-DIAG @2.7, L-DIAG @2.6
+// Motor driver diagnostic inputs at port 2
 void __attribute__((interrupt (PORT2_VECTOR))) p2isr() {
   // RDIAG went down = Right motor fail
   if(P2IFG & RDIAG){
+    P2IFG &= ~RDIAG;
     mmsg|= MMSG_FAIL;
   }
   // L-DIAG (2.6) went down = Left motor fail
   if(P2IFG & LDIAG){
+    P2IFG &= ~LDIAG;
     mmsg|= MMSG_FAIL;
   }
 }

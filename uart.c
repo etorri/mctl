@@ -48,15 +48,18 @@ void uart_init(void) {
   // Configure USCI UART 8 data 1 stop
   UCA0CTL0  = 0x00;
   UCA0CTL1 |= UCSSEL_2; // SMCLK
+
   // 9600 timings with oversampling
   /*
   UCA0BR0   = 104;
   UCA0BR1   = 0;
   UCA0MCTL  = UCBRF(3)| UCBRS(0) | UCOS16;
   */
+
   // 115200 timings with oversampling
   UCA0BR0   = 8; // divider low byte
   UCA0BR1   = 0; // divider high byte
+
   // baud rate modulation bits (UCB) and oversampling
   UCA0MCTL  = UCBRF(11)| UCBRS(0) | UCOS16;
 
@@ -84,42 +87,7 @@ uart_tx_isr(void) {
 void __attribute__((interrupt (USCIAB0RX_VECTOR)))
 uart_rx_isr(void) {
   static uint8_t c;
-  c=UCA0RXBUF;
-  put_buf(&rxbuf,&c);
-}
-
-
-
-
-void uart_write(const uint8_t c) {
-  uart_put_uint8(c);
-}
-
-uint8_t uart_read(void) {
-  uint8_t c;
-  uart_get_uint8(&c);
-  return c;
-}
-
-
-void uart_eol(void){
-  uart_print("\r\n");
-}
-
-void uart_print(const char *s) {
-  while(*s) {
-    uart_write(*s++);
-  }
-}
-
-void uart_printx(uint8_t *b, uint8_t n) {
-  static char hex_table[] = "0123456789ABCDEF";
-  uint8_t c;
-  b+=n-1;
-  while(n--) {
-    c=*(b--);
-    uart_write(hex_table[(c & 0xF0) >> 4]);
-    uart_write(hex_table[c & 0x0F]);
-  }
+  //c=UCA0RXBUF;
+  put_buf(&rxbuf,&UCA0RXBUF);
 }
 

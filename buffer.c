@@ -34,7 +34,7 @@ uint8_t put_buf(volatile struct CircularBuffer *b, uint8_t *c) {
 uint8_t get_buf(volatile struct CircularBuffer *b, uint8_t *c) {
   uint8_t uf;
   uf=1;
-  // if head==tail then the buffer would be empty
+  // if head==tail then the buffer is empty
   if((b->tail)!=(b->head)) {
     *c= b->data[b->tail];
     b->tail = MOD16(b->tail+1);
