@@ -1,6 +1,4 @@
-#ifndef TEST
 #include <msp430g2553.h>
-#endif
 #include <inttypes.h>
 #include "buffer.h"
 
@@ -16,30 +14,30 @@ void init_buf(volatile struct CircularBuffer *b){
 }
 
 // put byte to buffer unless it would overflow
-// returns 0 on success, 1 if overflow
+// 1=ok, 0=overflow
 uint8_t put_buf(volatile struct CircularBuffer *b, uint8_t *c) {
-  uint8_t of;
-  of=1; // assume it would overflow
+  uint8_t ok;
+  ok=0; // assume it would overflow
   // (head+1)==tail  is overflow
   if(MOD16(b->head+1)!=(b->tail)) {
     b->data[b->head] = *c;
     b->head = MOD16(b->head+1);
-    of=0; // success
+    ok=1; // success
   }
-  return of;
+  return ok;
 }
 
 // get byte from buffer if there are any
-// returns 0 on success, 1 if would cause underflow
+// 1=ok, 0=underflow
 uint8_t get_buf(volatile struct CircularBuffer *b, uint8_t *c) {
-  uint8_t uf;
-  uf=1;
+  uint8_t ok;
+  ok=0;
   // if head==tail then the buffer is empty
   if((b->tail)!=(b->head)) {
     *c= b->data[b->tail];
     b->tail = MOD16(b->tail+1);
-    uf=0;
+    ok=1;
   }
-  return uf;
+  return ok;
 }
 

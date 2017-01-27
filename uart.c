@@ -12,27 +12,27 @@ volatile struct CircularBuffer rxbuf;
 // loop trying to put the given byte to tx buffer until it succeeds.
 // enable tx interrupt (even if it is already on) to get the tx machine going
 void uart_put_uint8(uint8_t c) {
-  while(put_buf(&txbuf,&c))
+  while(put_buf(&txbuf,&c)==0)
     _NOP();
   IE2 |= UCA0TXIE;
 }
 
 void uart_get_uint8(uint8_t *cp){
-  while(get_buf(&rxbuf,cp))
+  while(get_buf(&rxbuf,cp)==0)
 	_NOP();
 }
 
 uint8_t uart_async_put_uint8(uint8_t c) {
-  if(put_buf(&txbuf,&c)){
-    return 0;
+  if(put_buf(&txbuf,&c)==0){
+    IE2 |= UCA0TXIE;
+    return 1;
   }
-  IE2 |= UCA0TXIE;
-  return 1;
+  return 0;
 }
 
 
 uint8_t uart_async_get_uint8(uint8_t *cp){
-  return !get_buf(&rxbuf,cp);
+  return get_buf(&rxbuf,cp);
 }
 
 
@@ -74,11 +74,11 @@ void __attribute__((interrupt (USCIAB0TX_VECTOR)))
 uart_tx_isr(void) {
   static uint8_t c;
   if(get_buf(&txbuf,&c)) {
-    // got nothing to send, stop interrupting 
-    IE2 &= ~UCA0TXIE;
-  } else {
     // got byte from the buffer, send it out
     UCA0TXBUF=c;
+  } else {
+    // buffer empty, stop interrupting
+    IE2 &= ~UCA0TXIE;
   }
 }
 
@@ -86,8 +86,6 @@ uart_tx_isr(void) {
 // received a byte, get it (and clear the interrupt), put it to rx buffer
 void __attribute__((interrupt (USCIAB0RX_VECTOR)))
 uart_rx_isr(void) {
-  static uint8_t c;
-  //c=UCA0RXBUF;
-  put_buf(&rxbuf,&UCA0RXBUF);
+  put_buf(&rxbuf,(uint8_t *)&UCA0RXBUF);
 }
 

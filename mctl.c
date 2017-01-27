@@ -12,7 +12,7 @@
 // Watchdog controls
 #define WD_HOLD  WDTCTL = (WDTPW|WDTHOLD)
 // Clear, select VLO clock (4KHz..20Khz, nominal 12KHz), divide by 8192
-#define WD_CLEAR WDTCTL = WD_HOLD
+#define WD_CLEAR WDTCTL = (WDTPW|WDTCNTCL)
 // WDT_ARST_1000
 // (WDTPW|WDTCNTCL|WDTSSEL_2|WDTIS_2)
 

@@ -17,7 +17,7 @@
 
 // go to FAIL state from RUN state if not receiving power settings
 // with this interval = 1/10s ( < 16cm at full speed )
-#define MAX_POWER_SETTING_INTERVAL 1000000
+#define MAX_POWER_SETTING_INTERVAL 2000000
 
 
 // Input message to the motor

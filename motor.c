@@ -38,15 +38,6 @@ static   int16_t right_power;
 // timeout timer to detect broken communication with pi
 static  uint32_t power_timer;
 
-// internal encoder timing variables
-// set by the interrupts
-static volatile uint32_t encoder_l_t, encoder_r_t; 
-static volatile uint32_t l_prev,r_prev;
-// direction 1=forward, 0=stopped, -1=backward
-// set by the interrupts
-volatile int8_t encoder_l_dir;
-volatile int8_t encoder_r_dir;
-
 // forward definitions
 static inline void motor_set_power(void);
 static inline void motor_ready(void);
@@ -56,18 +47,18 @@ static inline void motor_ready(void);
 // ---------------------- Initializations ------------------------
 //
 void encoder_init(void){
-  // initialize these just in case
+  // clear position counters
   m_out.l_pos = m_out.r_pos = 0;
-  encoder_l_t= encoder_r_t = 0;
-  // initialize the previous time at 0
-  l_prev= r_prev = 0;
-  // Encoder pins
+  // configure encoder pins
+  P1SEL &= ~(LENCA|LENCB|RENCA|RENCB); // as gpio
   P1DIR &= ~(LENCA|LENCB|RENCA|RENCB); // as inputs
-  P1IE |= RENCA|LENCA;                 // as interrupts (low->high)
-  // DIAG pins
+  P1IE  |= (RENCA|LENCA);              // A pins as interrupts
+  P1IES &=  ~(RENCA|LENCA);            // rising edge
+  // configure DIAG pins
+  P2SEL &= ~(LDIAG|RDIAG);             // as gpio
   P2DIR &= ~(LDIAG|RDIAG);             // as input
-  //P2IE |= (LDIAG|RDIAG);               // enable interrupt at high->low
-  //P2IES|= (LDIAG|RDIAG);
+  P2IE  |= (LDIAG|RDIAG);              // enable interrupt
+  P2IES |= (LDIAG|RDIAG);              // falling edge
   
 }
 
@@ -75,10 +66,11 @@ void encoder_init(void){
 
 void
 motor_init(void) {
-  // Set INA and INB as normal IO pin outputs
-  P2DIR  |= LINA|LINB|RINA|RINB;
-  P2SEL  &= ~(LINA|LINB|RINA|RINB);
-  P2SEL2 &= ~(LINA|LINB|RINA|RINB);
+  // configure INA/INB pins
+  P2SEL  &= ~(LINA|LINB|RINA|RINB); // as gpio
+  P2DIR  |= (LINA|LINB|RINA|RINB);  // as outputs
+  // P2SEL2 &= ~(LINA|LINB|RINA|RINB); 
+  P2IE   &= ~(LINA|LINB|RINA|RINB); 
   // initialize variables
   m_out.state=MSTATE_READY;
   m_in.msg=0;
