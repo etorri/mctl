@@ -44,7 +44,8 @@ static inline void motor_ready(void);
 
 
 
-// ---------------------- Initializations ------------------------
+// ----------------------------------------------------------------------
+// --- initialize encoder inputs
 //
 void encoder_init(void){
   // clear position counters
@@ -62,8 +63,22 @@ void encoder_init(void){
   
 }
 
+// ----------------------------------------------------------------------
+// --- prepare motor driver for the READY state (stopped, breaking)
+//
+static inline void
+motor_ready(void){
+  // set pwm to 0
+  left_power=right_power=0;
+  motor_set_power();
+  // motor in breaking state
+  P2OUT &= ~(LINA|LINB|RINA|RINB);
+}
 
 
+// ----------------------------------------------------------------------
+// --- Initialize the motor subsystem - called by mctl.c
+// 
 void
 motor_init(void) {
   // configure INA/INB pins
@@ -83,18 +98,9 @@ motor_init(void) {
 
 
 
-// ---------------------- Motor helper routines ------------------------
+// ----------------------------------------------------------------------
+// --- Set the power for left motor
 //
-
-static inline void
-motor_ready(void){
-  // set pwm to 0
-  left_power=right_power=0;
-  motor_set_power();
-  // motor in breaking state
-  P2OUT &= ~(LINA|LINB|RINA|RINB);
-}
-
 static inline void
 motor_set_left(int power) {
   int8_t sgn;
@@ -110,18 +116,30 @@ motor_set_left(int power) {
   pwm_l_set(power);
 }
 
+
+// ----------------------------------------------------------------------
+// --- Set the power for right motor
+//
 static inline void
 motor_set_right(int power) {
   int8_t sgn;
   sgn= (power>=0);
   power=abs(power);
+  // set direction based on the sign of the power setting
   if(sgn) {
     P2OUT = (P2OUT|RINA)&(~RINB);
   }else{
     P2OUT = (P2OUT|RINB)&(~RINA);
   }
+  // call helper to set the PWM
   pwm_r_set(power);
 }
+
+
+// ----------------------------------------------------------------------
+// --- Set the power for both motors
+//
+
 
 static inline void
 motor_set_power(void){
@@ -131,8 +149,12 @@ motor_set_power(void){
 
 
 
-// ------- Motor controller state machine -------
+// ----------------------------------------------------------------------
+// --- state machine to handle messages (in mmsg variable)
 //
+// the mmsg is set by protocols.c:input_scanner and any kind of failure
+// detection mechanism. There is a risk for timing conflicts
+
 
 void motor_step(void) {
   switch(m_out.state){
@@ -195,19 +217,13 @@ void motor_step(void) {
   }
 }
 
-/* Note:
-   TODO: The mmsg should be handled as a bit field
-   For MMSG_FAIL it should be cleared (mmsg=0) after changing the state to FAIL
-   to ignore any other messages
-   For others just clear that single flag i.e.  mmsg&= ~MMSG_STOP
-   Currently the MMSG_FAIL can be masked by power setting for example
-*/
+
+// ----------------------------------------------------------------------
+// --- Interrupt Service Routines for rotary encoders and driver failures
+//
 
 
-// ------------------ Interrupt Service Routines --------------
-
-
-// Encoders as port 1
+// Encoders at port 1
 void __attribute__((interrupt (PORT1_VECTOR))) p1isr() {
   // Left encoder interrupt
   if(P1IFG & LENCA) {

@@ -2,118 +2,85 @@
 #include "motor.h"
 #include <msp430g2553.h>
 
-/*
-  TO DO: Use CRC in communication. Preferably CRC16
-  Currently it is ignored
-*/
-
-
-// ****************************************************************************************
-//  CRC8 from http://www.barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code
-//
-#define POLYNOMIAL 0x8b //CRC-8-WCDMA
-#define WIDTH  (8 * sizeof(crc))
-#define TOPBIT (1 << (WIDTH - 1))
-
-static uint8_t rx_crc, tx_crc;
-const uint8_t
-crcTable[256] = {0x00, 0x8b, 0x9d, 0x16, 0xb1, 0x3a, 0x2c, 0xa7, 0xe9, 0x62, 0x74, 0xff, 0x58, 0xd3, 0xc5, 0x4e, 
-	   0x59, 0xd2, 0xc4, 0x4f, 0xe8, 0x63, 0x75, 0xfe, 0xb0, 0x3b, 0x2d, 0xa6, 0x01, 0x8a, 0x9c, 0x17, 
-	   0xb2, 0x39, 0x2f, 0xa4, 0x03, 0x88, 0x9e, 0x15, 0x5b, 0xd0, 0xc6, 0x4d, 0xea, 0x61, 0x77, 0xfc, 
-	   0xeb, 0x60, 0x76, 0xfd, 0x5a, 0xd1, 0xc7, 0x4c, 0x02, 0x89, 0x9f, 0x14, 0xb3, 0x38, 0x2e, 0xa5, 
-	   0xef, 0x64, 0x72, 0xf9, 0x5e, 0xd5, 0xc3, 0x48, 0x06, 0x8d, 0x9b, 0x10, 0xb7, 0x3c, 0x2a, 0xa1, 
-	   0xb6, 0x3d, 0x2b, 0xa0, 0x07, 0x8c, 0x9a, 0x11, 0x5f, 0xd4, 0xc2, 0x49, 0xee, 0x65, 0x73, 0xf8, 
-	   0x5d, 0xd6, 0xc0, 0x4b, 0xec, 0x67, 0x71, 0xfa, 0xb4, 0x3f, 0x29, 0xa2, 0x05, 0x8e, 0x98, 0x13, 
-	   0x04, 0x8f, 0x99, 0x12, 0xb5, 0x3e, 0x28, 0xa3, 0xed, 0x66, 0x70, 0xfb, 0x5c, 0xd7, 0xc1, 0x4a, 
-	   0x55, 0xde, 0xc8, 0x43, 0xe4, 0x6f, 0x79, 0xf2, 0xbc, 0x37, 0x21, 0xaa, 0x0d, 0x86, 0x90, 0x1b, 
-	   0x0c, 0x87, 0x91, 0x1a, 0xbd, 0x36, 0x20, 0xab, 0xe5, 0x6e, 0x78, 0xf3, 0x54, 0xdf, 0xc9, 0x42, 
-	   0xe7, 0x6c, 0x7a, 0xf1, 0x56, 0xdd, 0xcb, 0x40, 0x0e, 0x85, 0x93, 0x18, 0xbf, 0x34, 0x22, 0xa9, 
-	   0xbe, 0x35, 0x23, 0xa8, 0x0f, 0x84, 0x92, 0x19, 0x57, 0xdc, 0xca, 0x41, 0xe6, 0x6d, 0x7b, 0xf0, 
-	   0xba, 0x31, 0x27, 0xac, 0x0b, 0x80, 0x96, 0x1d, 0x53, 0xd8, 0xce, 0x45, 0xe2, 0x69, 0x7f, 0xf4, 
-	   0xe3, 0x68, 0x7e, 0xf5, 0x52, 0xd9, 0xcf, 0x44, 0x0a, 0x81, 0x97, 0x1c, 0xbb, 0x30, 0x26, 0xad, 
-	   0x08, 0x83, 0x95, 0x1e, 0xb9, 0x32, 0x24, 0xaf, 0xe1, 0x6a, 0x7c, 0xf7, 0x50, 0xdb, 0xcd, 0x46, 
-	    0x51, 0xda, 0xcc, 0x47, 0xe0, 0x6b, 0x7d, 0xf6, 0xb8, 0x33, 0x25, 0xae, 0x09, 0x82, 0x94, 0x1f};
-
-static inline void
-add_to_crc(uint8_t c, uint8_t *crc){
-     c = c ^ (*crc >> (WIDTH - 8));
-     *crc = crcTable[c] ^ (*crc << 8);
-}
 
 
 // ********************************************************************************************
-// Packet scanner 
+// States of the 
 
-#define S_INIT   0 // Initialize the scanner
-#define S_START  1 // Scan for the start character
-#define S_LEN    2 // get message length
-#define S_DATA   3 // read data
-#define S_CKSUM  4 // read checksum and end char, validate cksum and delegate the result
+#define S_START        1 // Scan for the start character
+#define S_DATA         2 // read data
 
 
 
+
+// state machine function to handle next input character in case there is one
 void input_scanner(void){
      uint8_t c;
-     static uint8_t scanner_state=S_INIT;
+     static uint8_t scanner_state=S_START;
      static uint8_t *dp;
      static uint8_t i;
+     static uint8_t data_esc=0;
+     static uint8_t f_err=0;
+     
      if(uart_async_get_uint8(&c)){
        switch(scanner_state){
-       case S_INIT:
-	 scanner_state=S_START;
-	 break;
        case S_START:
-	 if(c==C_START){
-	   scanner_state=S_LEN;
-	 } 
-	 break;
-
-       case S_LEN:
-	 if(c==sizeof(m_in)){
-	   i=0;
-	   rx_crc=0;
-	   dp=(uint8_t *) &m_in;
-	   scanner_state=S_DATA;
-	 }
-	 else {
-	   scanner_state=S_START;
-	   m_out.error=2;
-	 }
-	 break;
-
-       case S_DATA:
-	 //add_to_crc(c,&rx_crc);
-	 if(i < (sizeof(m_in)-1) ){
-	   dp[i] = c;
-	   i++;
-	 } else {
-	   dp[i]=c;
-	   scanner_state=S_CKSUM;
-	   i=0;
-	 }
-	 break;
-
-       case S_CKSUM:
-	 switch(i++){
-	 case 0:
-	   // scan next packet if the cksum does not match
-	   //if(c!=rx_crc)
-	   //scanner_state=S_START;
-	   break;
-
-	 case 1:
-	   if(c==C_END) {
-	     mmsg=m_in.msg;
-	     m_out.error=3;
-	   } else {
-	     m_out.error=1;
+	 // expecting this first byte to be C_FLAG, anything else tells about framing error
+	 //
+	 if(data_esc) { // just skip escaped char in START state
+	   data_esc=0;
+	   
+	 } else if(c==C_ESC) {
+	   // escaped state here is error, flag that (also escape the next byte)
+	   data_esc=1;
+	   f_err=1;
+	   
+	 } else if(c==C_FLAG){ // start of frame move to DATA state
+	   i=0; // we have received 0 bytes at start
+	   dp=(uint8_t *) &m_in; // received data goes to m_in struct
+	   if(f_err) {
+	     // increase error counter if we got anything but C_FLAG
+	     m_out.framing_errors++;
 	   }
-	   scanner_state=S_START;
-	   break;
-	 } // datalen
+	   f_err=0; // for next time
+	   scanner_state=S_DATA; // only way to get to next state
+	   
+	 } else {
+	   // whatever not C_FLAG byte is wrong here
+	   f_err=1;
+	 }
 	 break;
-       } // scanner_state
-     }
+
+       case S_DATA:  
+	 if(data_esc){
+	   // this char is escaped
+	   dp[i++]= c ^ C_XOR;
+	   if(i == sizeof(m_in)){
+	     // enough bytes read, ship it forward
+	     mmsg=m_in.msg; // tell the motor we got message
+	     i=0;
+	     scanner_state=S_START;
+	   }
+	   data_esc=0;
+	   
+	 } else if(c==C_ESC){
+	   // next char is escaped
+	   data_esc=1;
+
+	 } else {
+	   // ordinary data byte, add it in
+	   dp[i++] = c;
+	   if(i == sizeof(m_in)){
+	     // enough bytes read, ship it forward
+	     mmsg=m_in.msg; // tell the motor we got message
+	     i=0;
+	     scanner_state=S_START;
+	   }
+	 };
+	 break;
+
+       } // switch scanner_state
+     } // if input byte
 }
 		    
 
@@ -121,37 +88,36 @@ void input_scanner(void){
 // Status report to the Pi (motor state, position)
 #define MMSG_REPORT     49
        
-// timer for sending status report every second
+// timer for sending status reports with the given interval
 static uint32_t report_timer=0;
 
+// this is the reporting interval set by motor.c depending on the state there
 uint32_t report_interval;
 
-static inline void out1(uint8_t b) {
-  add_to_crc(b,&tx_crc);
-  uart_put_uint8(b);
-}
 
 
-static inline void out_n(void *lw, uint8_t n){
-  uint8_t i;
+// Send n bytes starting at lw pointer to the uart as one data frame
+//
+static inline void send_frame(uint8_t *lw, uint8_t n)
+{
   uint8_t c;
-  for(i=0;i<n;i++){
-    c= ((uint8_t *)lw)[i];
-    add_to_crc(c,&tx_crc);
-    uart_put_uint8(c);
+  
+  uart_put_uint8(C_FLAG);
+  while(n--){
+    c= *(lw++);
+    if((c==C_FLAG)|(c==C_ESC)) {
+      // escape frame flag and esc bytes in data
+      uart_put_uint8(C_ESC);
+      uart_put_uint8(c ^ C_XOR);
+    } else
+      uart_put_uint8(c);
   }
 }
 
-
+// called from main to send report when it is the time to do so
 void reporter(void){
   if(interval_elapsed(&report_timer,report_interval)){
-    tx_crc=0;
-    m_out.clock = wall_time(); // add timestamp
-    out1(C_START);
-    out1(sizeof(motor_out));
-    out_n(&m_out,sizeof(motor_out));
-    out1(tx_crc);
-    out1(C_END);
+    send_frame((uint8_t *)&m_out,sizeof(motor_out));
   }	  
 }
 

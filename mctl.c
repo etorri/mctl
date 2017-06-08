@@ -46,13 +46,13 @@ int main(void) {
   
   FOREVER {
     WD_CLEAR;
-    // read input
+    // deal with possible input bytes from uart
     input_scanner();
     WD_CLEAR;
-    // handle any pending state changes and messages to motor
+    // execute the possible input command
     motor_step();
     WD_CLEAR;
-    // send status reports to pi
+    // send status report
     reporter();
   }
 }

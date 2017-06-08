@@ -39,7 +39,7 @@ typedef struct mi motor_in;
 struct mo {
   volatile int32_t l_pos;  
   volatile int32_t r_pos;  
-  volatile uint32_t clock;
+  volatile uint32_t framing_errors;
   volatile uint8_t msg;    
   volatile uint8_t state;  
   volatile uint8_t error;

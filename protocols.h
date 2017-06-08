@@ -15,9 +15,10 @@
 
 extern uint32_t report_interval;
 
-// packet start stop values
-#define C_START  0xFF
-#define C_END    0x00
+// Frame flags
+#define C_FLAG  0x7E
+#define C_ESC   0x7F
+#define C_XOR   0x20
 
 // Maximum length for input message
 // change if 
